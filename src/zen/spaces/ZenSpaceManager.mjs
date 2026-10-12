@@ -11,6 +11,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   ZenSessionStore: "resource:///modules/zen/ZenSessionManager.sys.mjs",
+  ZenSpaceHistory: "resource:///modules/zen/ZenSpaceHistory.sys.mjs",
 });
 
 ChromeUtils.defineESModuleGetters(
@@ -1420,6 +1421,7 @@ class nsZenWorkspaces {
   removeWorkspace(windowID) {
     let { promise, resolve } = Promise.withResolvers();
     this.#deleteWorkspaceOwnedTabs(windowID);
+    lazy.ZenSpaceHistory.clear({ spaceId: windowID }).catch(console.error);
 
     let workspacesData = this.getWorkspaces();
     // Remove the workspace from the cache
