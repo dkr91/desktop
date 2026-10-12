@@ -56,3 +56,8 @@
 
 - name: zen.pinned-tab-manager.close-shortcut-behavior
   value: reset-unload-switch
+
+# Keeps a history for each space, which the library shows for the space
+# being looked at.
+- name: zen.workspaces.separate-history
+  value: false
