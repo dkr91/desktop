@@ -1,0 +1,21 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+[DEFAULT]
+prefs = [
+  "zen.library.enabled=true",
+  "zen.workspaces.force-container-workspace=false",
+]
+support-files = [
+  "head.js",
+  "file_title.html",
+]
+
+["browser_container_history_firefoxview.js"]
+
+["browser_container_history_library.js"]
+
+["browser_container_history_recording.js"]
+
+["browser_space_history.js"]
