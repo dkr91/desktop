@@ -1,0 +1,37 @@
+diff --git a/browser/components/firefoxview/HistoryController.sys.mjs b/browser/components/firefoxview/HistoryController.sys.mjs
+index bd8049229f6dfd246963119cad9bc4ebc0b9ad23..4f4617c1ce2fcc1c960088746f95d78fa1a56256 100644
+--- a/browser/components/firefoxview/HistoryController.sys.mjs
++++ b/browser/components/firefoxview/HistoryController.sys.mjs
+@@ -9,6 +9,7 @@ import { getLogger } from "chrome://browser/content/firefoxview/helpers.mjs";
+ ChromeUtils.defineESModuleGetters(lazy, {
+   PlacesQuery: "resource://gre/modules/PlacesQuery.sys.mjs",
+   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
++  ZenContainerHistory: "resource:///modules/zen/ZenContainerHistory.sys.mjs",
+ });
+ 
+ const HISTORY_MAP_L10N_IDS = {
+@@ -74,7 +75,11 @@ export class HistoryController {
+       component = "firefoxview",
+     } = {}
+   ) {
+-    this.placesQuery = new lazy.PlacesQuery();
++    // A container whose history is kept apart is shown its own history.
++    this.placesQuery =
++      lazy.ZenContainerHistory.createPlacesQuery(
++        lazy.ZenContainerHistory.userContextIdOf(host.ownerGlobal)
++      ) ?? new lazy.PlacesQuery();
+     this.searchQuery = "";
+     this.sortOption = sortOption;
+     this.searchResultsLimit = searchResultsLimit;
+@@ -100,7 +105,10 @@ export class HistoryController {
+   }
+ 
+   deleteFromHistory() {
+-    return lazy.PlacesUtils.history.remove(this.host.triggerNode.url);
++    const { url } = this.host.triggerNode;
++    return (
++      this.placesQuery.removeUrl?.(url) ?? lazy.PlacesUtils.history.remove(url)
++    );
+   }
+ 
+   onSearchQuery(e) {
