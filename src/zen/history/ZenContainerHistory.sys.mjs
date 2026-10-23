@@ -523,6 +523,9 @@ class ZenContainerPlacesQuery {
 
   /**
    * @param {object} [options] - As `PlacesQuery.getHistory` takes them
+   * @param {number} [options.daysOld] - How many days back to go
+   * @param {number} [options.limit] - How many visits to give at most
+   * @param {string} [options.sortBy] - How to sort and group the visits
    * @returns {Promise<Map|object[]>} The visits, grouped as `PlacesQuery`
    *   groups them for the same sort
    */
