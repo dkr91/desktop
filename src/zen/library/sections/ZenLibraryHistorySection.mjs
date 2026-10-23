@@ -19,6 +19,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   SessionStore:
     "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+  ZenContainerHistory: "resource:///modules/zen/ZenContainerHistory.sys.mjs",
   ZenSpaceHistory: "resource:///modules/zen/ZenSpaceHistory.sys.mjs",
 });
 
@@ -115,6 +116,7 @@ async function clearHistory(range) {
       endDate: new Date(),
     }),
     lazy.ZenSpaceHistory.clear({ beginDate }),
+    lazy.ZenContainerHistory.clear({ beginDate }),
   ]);
 }
 
@@ -168,6 +170,7 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
     Services.obs.addObserver(this.#closedObserver, CLOSED_OBJECTS_TOPIC);
     Services.obs.addObserver(this.#spaceHistoryObserver, SPACE_HISTORY_TOPIC);
     window.addEventListener("ZenWorkspacesUIUpdate", this.#onSpaceChanged);
+    gBrowser.tabContainer.addEventListener("TabSelect", this.#onSpaceChanged);
     this.#menu = this.#buildMenu();
     this.#fetch();
   }
@@ -180,8 +183,14 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
       SPACE_HISTORY_TOPIC
     );
     window.removeEventListener("ZenWorkspacesUIUpdate", this.#onSpaceChanged);
+    gBrowser.tabContainer.removeEventListener(
+      "TabSelect",
+      this.#onSpaceChanged
+    );
     this.#placesQuery?.close();
     this.#placesQuery = null;
+    this.#containerQuery?.close();
+    this.#containerQuery = null;
     this.#menu?.hidePopup();
     this.#menu?.remove();
     this.#menu = null;
@@ -290,13 +299,46 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
     },
   };
 
-  #shownSpaceId = null;
+  #shownSource = null;
+  #containerQuery = null;
 
   #onSpaceChanged = () => {
-    if (!this.#showingClosed && this.#separateSpaceId !== this.#shownSpaceId) {
+    if (!this.#showingClosed && this.#historySource !== this.#shownSource) {
       this.#resetAndFetch();
     }
   };
+
+  /**
+   * @returns {string} Which history the list is read from: the space's, the
+   *   container's or the global one
+   */
+  get #historySource() {
+    const spaceId = this.#separateSpaceId;
+    if (spaceId !== null) {
+      return `space:${spaceId}`;
+    }
+    const userContextId = lazy.ZenContainerHistory.userContextIdOf(window);
+    return lazy.ZenContainerHistory.isSeparate(userContextId)
+      ? `container:${userContextId}`
+      : "global";
+  }
+
+  /**
+   * @returns {object} What to read history through for the container of the
+   *   tab being looked at: its own history when that is kept apart, or the
+   *   global one
+   */
+  #queryForContainer() {
+    const userContextId = lazy.ZenContainerHistory.userContextIdOf(window);
+    if (this.#containerQuery?.userContextId === userContextId) {
+      return this.#containerQuery;
+    }
+    this.#containerQuery?.close();
+    this.#containerQuery =
+      lazy.ZenContainerHistory.createPlacesQuery(userContextId);
+    this.#containerQuery?.observeHistory(() => this.#fetch());
+    return this.#containerQuery ?? this.#placesQuery;
+  }
 
   /**
    * @returns {string?} The space being looked at, when each space keeps a
@@ -504,7 +546,9 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
     const generation = ++this.#fetchGeneration;
     const daysOld = this.#activeDaysOld;
     const separateSpaceId = this.#separateSpaceId;
-    this.#shownSpaceId = separateSpaceId;
+    this.#shownSource = this.#historySource;
+    const query =
+      separateSpaceId === null ? this.#queryForContainer() : this.#placesQuery;
     let visits;
     if (separateSpaceId !== null) {
       visits = await this.#fetchSpaceVisits(
@@ -513,15 +557,14 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
         this.#limit
       );
     } else if (this.searchQuery) {
-      visits =
-        (await this.#placesQuery.searchHistory(
-          this.searchQuery,
-          this.#limit
-        )) ?? [];
-    } else if (this.#activeSort === "mostvisited") {
+      visits = (await query.searchHistory(this.searchQuery, this.#limit)) ?? [];
+    } else if (
+      this.#activeSort === "mostvisited" &&
+      query === this.#placesQuery
+    ) {
       visits = this.#fetchMostVisited(daysOld, this.#limit);
     } else {
-      visits = await this.#placesQuery.getHistory({
+      visits = await query.getHistory({
         daysOld,
         limit: this.#limit,
         sortBy: this.#activeSort,
@@ -625,7 +668,14 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
       !!event && (event.getModifierState("Accel") || event.button === 1);
     const openTab =
       visit.closedId === undefined
-        ? () => window.openTrustedLinkIn(visit.url, "tab", { inBackground })
+        ? () =>
+            window.openTrustedLinkIn(visit.url, "tab", {
+              inBackground,
+              // A container's history opens back in that container.
+              ...(visit.userContextId
+                ? { userContextId: visit.userContextId }
+                : {}),
+            })
         : () => this.#restoreTab(visit, inBackground);
     if (!inBackground) {
       openTab();
@@ -677,6 +727,10 @@ export class ZenLibraryHistorySection extends ZenLibrarySearchSection {
     }
     if (visit.spaceId) {
       lazy.ZenSpaceHistory.removeUrl(visit.url, visit.spaceId).catch(
+        console.error
+      );
+    } else if (visit.userContextId) {
+      lazy.ZenContainerHistory.removeUrl(visit.url, visit.userContextId).catch(
         console.error
       );
     } else {

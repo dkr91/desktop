@@ -180,6 +180,9 @@ zen-settings-workspaces-force-container-tabs-to-workspace =
 zen-settings-workspaces-separate-history =
     .label = Keep a separate history for each space
 
+zen-settings-containers-separate-history =
+    .label = Keep a separate history for each container
+
 zen-theme-marketplace-link = Visit Store
 
 zen-dark-theme-styles-header = Dark Theme Styles

@@ -83,24 +83,15 @@ class nsZenSpaceHistory {
       onLocationChange: (browser, webProgress, request, location, flags) =>
         this.#onLocationChange(browser, webProgress, location, flags),
     };
-    const onTabAttrModified = event => {
-      if (event.detail?.changed?.includes("label")) {
-        this.#onTitleChanged(event.target);
-      }
-    };
+    const onTitleChanged = event =>
+      this.#onTitleChanged(window.gBrowser.getTabForBrowser(event.target));
     window.gBrowser.addTabsProgressListener(progressListener);
-    window.gBrowser.tabContainer.addEventListener(
-      "TabAttrModified",
-      onTabAttrModified
-    );
+    window.gBrowser.addEventListener("pagetitlechanged", onTitleChanged);
     window.addEventListener(
       "unload",
       () => {
         window.gBrowser.removeTabsProgressListener(progressListener);
-        window.gBrowser.tabContainer.removeEventListener(
-          "TabAttrModified",
-          onTabAttrModified
-        );
+        window.gBrowser.removeEventListener("pagetitlechanged", onTitleChanged);
       },
       { once: true }
     );
@@ -167,7 +158,12 @@ class nsZenSpaceHistory {
     }
     this.#addVisit({
       url: location.spec,
-      title: browser.contentTitle || "",
+      // A new document has no title yet, and the browser still holds the
+      // last one's; it comes with pagetitlechanged.
+      title:
+        flags & Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT
+          ? browser.contentTitle || ""
+          : "",
       spaceId,
     }).catch(console.error);
   }
@@ -251,8 +247,14 @@ class nsZenSpaceHistory {
   async #addVisit({ url, title, spaceId }) {
     const connection = await this.#getConnection();
     await connection.execute(
+      // A page visited again keeps the title it was last known by until
+      // its own comes.
       `INSERT INTO visits (url, title, space_id, visit_date)
-       VALUES (:url, :title, :spaceId, :date)`,
+       VALUES (:url, COALESCE(NULLIF(:title, ''), (
+         SELECT title FROM visits
+         WHERE space_id = :spaceId AND url = :url
+         ORDER BY visit_date DESC LIMIT 1
+       ), ''), :spaceId, :date)`,
       { url, title, spaceId, date: Date.now() }
     );
     this.#notifyChanged();

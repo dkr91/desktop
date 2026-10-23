@@ -1179,6 +1179,11 @@ Preferences.addAll([
     default: false,
   },
   {
+    id: "zen.containers.separate-history",
+    type: "bool",
+    default: false,
+  },
+  {
     id: "zen.workspaces.open-new-tab-if-last-unpinned-tab-is-closed",
     type: "bool",
     default: true,

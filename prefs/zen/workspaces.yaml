@@ -61,3 +61,8 @@
 # being looked at.
 - name: zen.workspaces.separate-history
   value: false
+
+# Keeps what is browsed in a container out of the global history, in a
+# history of that container's own.
+- name: zen.containers.separate-history
+  value: false
